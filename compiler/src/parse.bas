@@ -1,0 +1,7 @@
+#include "parse_expr.bas"
+#include "parse_datatype.bas"
+#include "parse_dim.bas"
+#include "parse_proc.bas"
+#include "parse_while.bas"
+#include "parse_if.bas"
+#include "parse_type.bas"

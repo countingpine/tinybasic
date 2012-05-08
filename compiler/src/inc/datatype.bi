@@ -1,12 +1,18 @@
-#include once "inc/sym.bi"
+#include once "compiler/src/inc/sym.bi"
+
+enum dt_e
+	DT_BAD
+	DT_INTEGER
+	DT_UINTEGER
+	DT_ANY
+	DT_TYPE
+	DT_STRING
+	DT_ZSTRING
+	DT_LITSTR
+end enum
 
 type datatype_t
-	dt as sym_t ptr
-	ptr_cnt as integer
-	s as string
-	sym as sym_t ptr
-	expr(0 To 15) as any ptr
-	expr_cnt as integer
-	is_proc as integer
+	_dt as integer
+	_ptr_cnt as integer
+	_sym as sym_t ptr
 end type
-

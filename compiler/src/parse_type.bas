@@ -1,59 +1,46 @@
 '::::::::
-sub parse_type _
+function parse_type_fwd _
 	( _
-	)
+		byref _alias as string _
+	) as node_t ptr
+
+	dim as string _real
+
+	_real = lexer_stack.curr_lex->tk_str
+	read_token( ) ' dump identifier
+
+	if sym_exists( _alias ) then
+		die( "Symbol '" & _alias & "' already exists!" )
+	end if
+
+	if sym_exists( _real ) then
+		die( "Symbol '" & _real & "' already exists!" )
+	end if
+
+	function = tree_node_type_fwd_decl( sym_add_type_fwd( _alias, _real ) )
+
+end function
+
+'::::::::
+function parse_type _
+	( _
+	) as node_t ptr
 
 	dim as string  ident
 	dim as integer member_count
 	dim as sym_t ptr members = callocate( sizeof( sym_t ) * 256 )
 	dim as integer i
 
-	ident = tk_str
+	ident = lexer_stack.curr_lex->tk_str
 	read_token( ) ' dump identifier
 
-	if match( TK_EOL ) = 0 then
-		expected( "end of line", tk_str )
-	end if
-
-	while (lcase( tk_str ) <> "end") and (tk_typ <> TK_EOF)
-		members[member_count].ident = tk_str
-		read_token( ) ' dump identifier
-		if match_str( "(" ) then
-			members[member_count].typ = SYM_ARRAY
-			if match_str( "0" ) = 0 then
-				expected( "0", tk_str )
-			end if
-			if match_str( "to" ) = 0 then
-				expected( "TO", tk_str )
-			end if
-			members[member_count].array_size = val(tk_str) + 1
-			read_token( )
-			if match_str( ")" ) = 0 then
-				expected( "')'", tk_str )
-			end if
-		else
-			members[member_count].typ = SYM_VAR
-		end if
-		if match_str( "as" ) = 0 then
-			expected( "as", tk_str )
-		end if
-		members[member_count].dt = parse_datatype( )
-		if match( TK_EOL ) = 0 then
-			expected( "end of line", tk_str )
-		end if
-		member_count += 1
-	wend
-
-	if match_str( "end" ) = 0 then
-		expected( "END", tk_str )
-	end if
-
-	if match_str( "type" ) = 0 then
-		expected( "TYPE", tk_str )
+	if match( TK_AS ) then
+		free( members )
+		return parse_type_fwd( ident )
 	end if
 
 	if match( TK_EOL ) = 0 then
-		expected( "end of line", tk_str )
+		expected( "end of line", lexer_stack.curr_lex->tk_str )
 	end if
 
 	if sym_exists( ident ) then
@@ -63,30 +50,55 @@ sub parse_type _
 
 	dim as sym_t ptr sym
 
-	sym = sym_add_type( ident, member_count, members )
+	sym = sym_add_type( ident, ident, member_count, members )
 
-	emit_line( "/*::::::::*/" )
-	emit_line( "struct " & ident & " {" )
-	indent += 1
-	i = 0
-	while i < member_count
-		dim as string s
-		dim as datatype_t ptr dt = members[i].dt
-		if dt->dt = 0 then
-			dt->dt = sym
-			dim as datatype_t ptr tmp = sym->members[i].dt
-			tmp->dt->dt = sym
+	while (lexer_stack.curr_lex->tk_typ <> TK_END) and (lexer_stack.curr_lex->tk_typ <> TK_EOF)
+		while match( TK_EOL )
+			' cycle away the blank lines
+		wend
+		members[member_count].is_field = -1
+		members[member_count].ident = lexer_stack.curr_lex->tk_str
+		members[member_count]._alias = lexer_stack.curr_lex->tk_str
+		read_token( ) ' dump identifier
+		members[member_count].typ = SYM_VAR
+		if match( TK_CHAR_LPAREN ) then
+			if match_str( "0" ) = 0 then
+				expected( "0", lexer_stack.curr_lex->tk_str )
+			end if
+			if match( TK_TO ) = 0 then
+				expected( "TO", lexer_stack.curr_lex->tk_str )
+			end if
+			members[member_count].is_array = -1
+			members[member_count].array_size = val(lexer_stack.curr_lex->tk_str) + 1
+			read_token( )
+			if match( TK_CHAR_RPAREN ) = 0 then
+				expected( "')'", lexer_stack.curr_lex->tk_str )
+			end if
 		end if
-		s = dt->s & " " & members[i].ident
-		if members[i].typ = SYM_ARRAY then
-			s += "[" & members[i].array_size & "]"
+		if match( TK_AS ) = 0 then
+			expected( "AS(3)", lexer_stack.curr_lex->tk_str )
 		end if
-		emit_line( s & ";" )
-		i += 1
+		members[member_count].dt = parse_datatype( )
+		if match( TK_EOL ) = 0 then
+			expected( "end of line", lexer_stack.curr_lex->tk_str )
+		end if
+		member_count += 1
 	wend
-	indent -= 1
-	emit_line( "};" )
-	emit_line( "" )
 
-end sub
+	sym->member_count = member_count
 
+	if match( TK_END ) = 0 then
+		expected( "END", lexer_stack.curr_lex->tk_str )
+	end if
+
+	if match( TK_TYPE ) = 0 then
+		expected( "TYPE", lexer_stack.curr_lex->tk_str )
+	end if
+
+	if match( TK_EOL ) = 0 then
+		expected( "end of line", lexer_stack.curr_lex->tk_str )
+	end if
+
+	function = tree_node_type_decl( sym )
+
+end function

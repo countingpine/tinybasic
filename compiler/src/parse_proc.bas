@@ -1,106 +1,103 @@
-'::::::::
-sub parse_sub _
+type proc_header_t
+	ident   as string
+	dt      as datatype_t ptr
+	pi      as param_info_t ptr
+	p_count as integer
+end type
+
+function parse_proc_header _
 	( _
-		byval is_decl as integer _
-	)
+	) as proc_header_t ptr
 
-	dim as string ident
-	dim as datatype_t ptr dt
-	dim as string param_ident(0 To 255)
-	dim as datatype_t ptr param_dt(0 To 255)
-	dim as integer param_is_byval(0 To 255)
-	dim as integer param_is_byref(0 To 255)
-	dim as integer p_count
-	dim as string s
-	dim as integer i
+	dim as proc_header_t ptr pl
 
-	ident = tk_str
+	pl = callocate( sizeof( proc_header_t ) )
+	pl->pi = callocate( sizeof( param_info_t ) * 16 )
+
+	pl->ident = lexer_stack.curr_lex->tk_str
 	read_token( )
 
-	if match_str( "(" ) = 0 then
-		expected( "'('", tk_str )
+	if match( TK_CHAR_LPAREN ) = 0 then
+		expected( "'('", lexer_stack.curr_lex->tk_str )
 	end if
 
-	symstack_push( )
+	while (lexer_stack.curr_lex->tk_typ <> TK_CHAR_RPAREN) _
+	  and (lexer_stack.curr_lex->tk_typ <> TK_EOF)
+		dim as param_info_t ptr pi = @pl->pi[pl->p_count]
 
-	while (tk_str <> ")") and (tk_typ <> TK_EOF)
-		if match_str( "byref" ) then
-			param_is_byval(p_count) = 0
-			param_is_byref(p_count) = -1
-		elseif match_str( "byval" ) then
-			param_is_byval(p_count) = -1
-			param_is_byref(p_count) = 0
+		if match( TK_BYREF ) then
+			pi->is_byref = -1
+		elseif match( TK_BYVAL ) then
+			pi->is_byval = -1
 		else
-			expected( "byval/byref", tk_str )
+			expected( "BYVAL/BYREF", lexer_stack.curr_lex->tk_str )
 		end if
-		param_ident(p_count) = tk_str
+
+		pi->ident = lexer_stack.curr_lex->tk_str
 		read_token( )
-		if match_str( "as" ) = 0 then
-			expected( "as", tk_str )
+
+		if match( TK_AS ) = 0 then
+			expected( "AS", lexer_stack.curr_lex->tk_str )
 		end if
-		param_dt(p_count) = parse_datatype( )
-		sym_add_dim( param_ident(p_count), param_dt(p_count), 0, 0, 0 )
-		p_count += 1
-		if tk_str = "," then
-			read_token( )
-		else
+
+		pi->dt = parse_datatype( )
+
+		pi->sym = sym_add_dim( pi->ident, pi->ident, new_datatype( pi->dt->_dt, pi->dt->_ptr_cnt, pi->dt->_sym ), 0, 0, 0 )
+
+		pl->p_count += 1
+
+		if match( TK_CHAR_COMMA ) = 0 then
 			exit while
 		end if
 	wend
 
-	if match_str( ")" ) = 0 then
-		expected( "')'", tk_str )
+	if match( TK_CHAR_RPAREN ) = 0 then
+		expected( "')'", lexer_stack.curr_lex->tk_str )
 	end if
 
-	if match_str( "as" ) then
-		dt = parse_datatype( )
+	if match( TK_AS ) then
+		pl->dt = parse_datatype( )
 	else
-		dt = 0
+		pl->dt = 0
 	end if
 
 	if match( TK_EOL ) = 0 then
-		expected( "end of line", tk_str )
+		expected( "end of line", lexer_stack.curr_lex->tk_str )
 	end if
 
-	emit_line( "/*::::::::*/" )
-	if dt then
-		s = dt->s & " "
+	function = pl
+
+end function
+
+'::::::::
+function parse_proc _
+	( _
+		byval is_func as integer, _
+		byval is_decl as integer _
+	) as node_t ptr
+
+	dim as proc_header_t ptr pl
+	dim as string            s
+	dim as integer           i
+	dim as sym_t ptr         sym
+	dim as node_t ptr        stmt_list
+
+	symstack_push( )
+
+	pl = parse_proc_header( )
+
+	'print "/* " & pl->ident & " " & pl->p_count & " */"
+	sym = sym_add_proc( pl->ident, pl->ident, pl->dt, pl->pi, pl->p_count )
+
+	if is_decl = 0 then
+		stmt_list = parse_stmt_list( )
+		function = tree_node_proc( sym, stmt_list, symstack_pop( ) )
 	else
-		s = "void "
+		function = tree_node_proc_decl( sym, symstack_pop( ) )
 	end if
 
-	s += ident & "("
+	pl->ident = ""
+	'free(pl->pi)
+	free(pl)
 
-	i = 0
-	while i < p_count
-		if param_is_byref(i) then
-			's += "const "
-		end if
-		s += param_dt(i)->s
-		if param_is_byref(i) then
-			s += "&"
-		end if
-		s += " " & param_ident(i)
-		i += 1
-		if i <> p_count then
-			s += ", "
-		end if
-	wend
-       
-	s += ")"
-
-	if is_decl then
-		emit_line( s & ";" )
-	else
-		emit_line( s )
-		emit_line( "{" )
-		indent += 1
-		if dt then
-			emit_line( dt->s & " func$result = 0;" )
-		end if
-	end if
-
-	sym_add_proc( ident )
-
-end sub
-
+end function

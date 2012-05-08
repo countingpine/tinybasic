@@ -1,2 +1,3 @@
 extern as integer CHAR_DBLQUOTE
-dim shared as integer indent
+extern as integer CHAR_TAB
+extern as integer indent
